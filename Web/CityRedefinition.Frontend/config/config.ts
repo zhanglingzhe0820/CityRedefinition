@@ -47,6 +47,12 @@ export default defineConfig({
               component: './home',
             },
             {
+              name: '监控页',
+              icon: 'smile',
+              path: '/dashboardmonitor',
+              component: './DashboardMonitor',
+            },
+            {
               component: './404',
             },
           ],
