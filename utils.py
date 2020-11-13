@@ -96,9 +96,10 @@ def createFishNet(input_shp, output_grid, height, width, driver_name="ESRI Shape
 
 # ************************* [1] Road Network Intersection Points *************************
 def createRoadIntersectionPoint(road_shp, output_shp, suffix=None):
-    output_dir = os.path.dirname(output_shp)
-    output_base = os.path.splitext(os.path.basename(road_shp))[0]
-    output_shp = os.path.join(output_dir, output_base + suffix + ".shp")
+    if suffix is not None:
+        output_dir = os.path.dirname(output_shp)
+        output_base = os.path.splitext(os.path.basename(road_shp))[0]
+        output_shp = os.path.join(output_dir, output_base + suffix + ".shp")
 
     road_ds = ogr.Open(road_shp)
     road_layer = road_ds.GetLayer()
@@ -174,7 +175,7 @@ def createRoadIntersectionPoint_multiproc(road_shp, output_shp, reserved=False, 
             subOutput = os.path.join(road_dir, road_base + "_IntersectionPt_temp_{0}.shp".format(str(i) + str(j)))
             extent = [x_min_list[j], y_min_list[i], x_max_list[j], y_max_list[i]]
             os.system("ogr2ogr -f 'ESRI Shapefile' {0} {1} -clipsrc {2}".format(subRegion, road_shp, " ".join(str(x) for x in extent)))
-            arg_list.append((subRegion, subOutput, str(i) + str(j)))
+            arg_list.append((subRegion, subOutput))
 
     # ------call the createRoadIntersectionPoint function for each sub-regions
     pool = multiprocessing.Pool(processes=num_cpu)
@@ -219,12 +220,12 @@ def getRoadLength(road_shp, output_grid, resolution=0.5/60.0, scale=1.0, reserve
         if os.path.exists(intersect_path):
             os.remove(intersect_path)
         intersect_ds = intersect_driver.CreateDataSource(intersect_path)
-        intersect_layer = intersect_ds.CreateLayer(output_grid, geom_type=ogr.wkbPolygon)
+        intersect_layer = intersect_ds.CreateLayer(output_grid, geom_type=ogr.wkbLineString)
 
         road_layer.Intersection(fishnet_layer, intersect_layer, ["PRETEST_CONTAINMENT=YES", "METHOD_PREFIX=FN_"])
 
         # ------calculate the sum of road length for each cell in FishNet layer
-        val_list = [[feature.GetField("FN_FID"), feature.GetGeometryRef().GetLength()] for feature in intersect_layer]
+        val_list = [[feature.GetField("FN_FID"), feature.GetGeometryRef().Length()] for feature in intersect_layer]
 
         if extent is not None:
             x_min, y_min, x_max, y_max = extent
@@ -282,7 +283,7 @@ def getRoadLength_multiproc(road_shp, resolution=0.5/60.0, scale=1.0, reserved=F
     for i in range(0, n_sub):
         for j in range(0, n_sub):
             subRegion = os.path.join(road_dir, road_base + "_temp_{0}.shp".format(str(i) + str(j)))
-            subOutput = os.path.join(road_dir, road_base + "_roadLength_temp_{0}.shp".format(str(i) + str(j)))
+            subOutput = os.path.join(road_dir, road_base + "_roadLength_temp_{0}.tif".format(str(i) + str(j)))
             extent = [x_min_list[j], y_min_list[i], x_max_list[j], y_max_list[i]]
             os.system("ogr2ogr -f 'ESRI Shapefile' {0} {1} -clipsrc {2}".format(subRegion, road_shp, " ".join(str(x) for x in extent)))
             arg_list.append((subRegion, subOutput, resolution, scale, True, str(i) + str(j), extent))
@@ -294,7 +295,7 @@ def getRoadLength_multiproc(road_shp, resolution=0.5/60.0, scale=1.0, reserved=F
     pool.join()
 
     # ------merge GeoTiff from sub-regions
-    tiff_path = os.path.join(road_dir, road_shp + "_roadLength.tif")
+    tiff_path = os.path.join(road_dir, road_base + "_roadLength.tif")
 
     res_tiff_list = [i for i in res_list if i != "EMPTY"]
     os.system("gdalwarp {0} {1}".format(" ".join(res_tiff_list), tiff_path))
